@@ -109,7 +109,7 @@ router.post('/createRoom', function (req, res, next) {
           'userId': socket._guestId,
           'name': socket._name,
         });
-        nsp.on("group-message", (msgObj) => { //{type=0:"msg",type=1:"Action",type=3:"typing"}  {type,from,msg}
+        socket.on("group-message", (msgObj) => { //{type=0:"msg",type=1:"Action",type=3:"typing"}  {type,from,msg}
           console.log('\x1b[32m%s\x1b[0m', "GROUP MESSAGE >>>>");
           console.log(msgObj);
           console.log('\x1b[32m%s\x1b[0m', "GROUP MESSAGE <<<<");
