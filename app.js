@@ -1,33 +1,29 @@
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+const express = require('express');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const logger = require('morgan');
 const cors = require('cors');
-
-
-var indexRouter = require('./routes/index');
-var admin = require('./routes/admin');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-dotenv.config();
-var app = express();
+const { logToConsole } = require('./utils/utils');
+require('dotenv').config();
 
+const app = express();
 app.use(cors());
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-mongoose.connect(process.env.MONGODB_URI, {useFindAndModify: false, useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true}, ()=>{
-    console.log("Database Connected");
+
+mongoose.connect(process.env.MONGODB_URI, { useFindAndModify: false, useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true }, () => {
+    logToConsole("SUCCESS", "Database Connected");
+});
+mongoose.connection.on('error', () => {
+    logToConsole("DANGER", "MongoDB connection error. Please make sure that MongoDB is running.");
+    process.exit(1);
 });
 
-mongoose.connection.on('error', ()=>{
-console.log("MongoDB connection error. Please make sure that MongoDB is running.");
-process.exit(1);
-});
-
-app.use('/', indexRouter);
-app.use('/admin', admin);
+app.use('/', require('./routes/index'));
+app.use('/admin', require('./routes/admin'));
 
 module.exports = app;

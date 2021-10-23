@@ -46,25 +46,30 @@ const roomSchema = new Schema({
         }
     }]
 });
-roomSchema.statics.joinRoom = (meetingId, guestObj) => {  //gusetObj = {'guestId','guestName'}
+
+roomSchema.statics.joinRoom = (meetingId, guestObj) => {  //guestObj = {'guestId','guestName'}
     var promise = new Promise((resolve, reject) => {
         Room.findOne({ 'meetingId': meetingId }, (err, room) => {
             if (err) return reject(err);
-            if (!room) return resolve({ status: false, msg: "Room Not found" });
-            let guset = room.guests.find(x => {
+            if (!room) return resolve({ status: false, msg: "Invalid Meeting ID!" });
+            let guest = room.guests.find(x => {
                 return x.guestId == guestObj.guestId;
             });
             let msg = "";
-            if (guset) {
-                let oldGuests = room.guests.filter(x => {
-                    return x.guestId != guestObj.guestId;
-                });
-                guset.status = true;
-                guset.leftAt = null;
-                oldGuests.push(guset);
-                room.guests = oldGuests;
-                msg = "Guest already in the room, status updated";
-
+            if (guest) {
+                if (guest.status) {
+                    msg = "Guest already joined";
+                } else {
+                    let oldGuests = room.guests.filter(x => {
+                        return x.guestId != guestObj.guestId;
+                    });
+                    guest.status = true;
+                    guest.leftAt = null;
+                    guest.joinedAt = Date.now();
+                    oldGuests.push(guest);
+                    room.guests = oldGuests;
+                    msg = "Guest already in the meeting, status updated";
+                }
             } else {
                 room.guests.push(guestObj);
                 msg = "Guest added";
@@ -78,27 +83,29 @@ roomSchema.statics.joinRoom = (meetingId, guestObj) => {  //gusetObj = {'guestId
     });
     return promise;
 }
-roomSchema.statics.leaveRoom = (roomId, guestObj) => {
+
+roomSchema.statics.leaveRoom = (roomId, guestId) => {
     var promise = new Promise((resolve, reject) => {
         Room.findOne({ 'roomId': roomId }, (err, room) => {
             if (err) return reject(err);
-            if (!room) return resolve({ status: false, msg: "Room Not found" });
-            let guset = room.guests.find(x => {
-                return x.guestId == guestObj.guestId;
+            if (!room) return resolve({ status: false, msg: "Invalid Meeting ID!" });
+            let guest = room.guests.find(x => {
+                return x.guestId == guestId;
             });
             let msg = "";
-            if (guset) {
+            if (guest) {
                 let oldGuests = room.guests.filter(x => {
-                    return x.guestId != guestObj.guestId;
+                    return x.guestId != guestId;
                 });
-                guset.status = false;
-                guset.leftAt = Date.now();
-                room.guests.push(guset);
+                guest.status = false;
+                guest.leftAt = Date.now();
+                oldGuests.push(guest);
+                room.guests = oldGuests;
                 msg = "Guest leaved";
-                room.save().then(newRomm => {
-                    return resolve({ status: true, data: newRomm, msg: msg });
+                room.save().then(newRoom => {
+                    return resolve({ status: true, msg: msg });
                 }).catch(e => {
-                    return reject(e);
+                    return reject({ status: false, msg: "Guest Leave Error" });
                 })
             } else {
                 return resolve({ status: false, msg: "Guest was not in this room" });
@@ -106,12 +113,13 @@ roomSchema.statics.leaveRoom = (roomId, guestObj) => {
         });
     });
     return promise;
-};
+}
+
 roomSchema.statics.verifyKey = (meetingId, roomKey) => {
     var promise = new Promise((resolve, reject) => {
         Room.findOne({ 'meetingId': meetingId }, (err, room) => {
             if (err) return reject(err);
-            if (!room) return resolve({ status: false, msg: "Invalid Meeting Id" });
+            if (!room) return resolve({ status: false, msg: "Invalid Meeting Id!" });
             if (roomKey == room.roomKey) {
                 return resolve({ status: true, msg: "Successfully Authenticated", data: room.roomId });
             } else {
@@ -121,32 +129,35 @@ roomSchema.statics.verifyKey = (meetingId, roomKey) => {
     });
     return promise;
 }
+
 roomSchema.statics.getGuests = (roomId, status = "ANY") => {
     var promise = new Promise((resolve, reject) => {
         Room.findOne({ 'roomId': roomId }, (err, room) => {
             if (err) return reject(err);
-            if (!room) return resolve({ status: false, msg: "Invalid Room Id" });
+            if (!room) return resolve({ status: false, msg: "Invalid Meeting Id!" });
             if (status == "ANY") {
-                return resolve({ status: true, msg: "Guests found", data: room.guests });
+                return resolve({ status: true, msg: "Guests found", meetingId: room.meetingId, data: room.guests });
             } else {
                 var filteredGuest = room.guests.filter(x => {
                     return x.status == status;
                 });
-                return resolve({ status: true, msg: "Guests found(filtered)", data: filteredGuest })
+                return resolve({ status: true, msg: "Guests found(filtered)", meetingId: room.meetingId, data: filteredGuest })
             }
         });
     });
     return promise;
 }
+
 roomSchema.statics.getRoomId = (meetingId) => {
     var promise = new Promise((resolve, reject) => {
         Room.findOne({ 'meetingId': meetingId }, (err, room) => {
             if (err) return reject(err);
-            if (!room) return resolve({ status: false, msg: "Invalid Meeting Id" });
+            if (!room) return resolve({ status: false, msg: "Invalid Meeting Id!" });
 
             return resolve({ status: true, msg: "Room Id found", data: { roomId: room.roomId, roomKey: room.roomKey } });
         });
     });
     return promise;
-};
+}
+
 const Room = module.exports = mongoose.model('Room', roomSchema);
