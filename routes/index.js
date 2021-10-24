@@ -21,10 +21,9 @@ router.post('/createRoom', (req, res) => {
 		const nsp = io
 			.of('/' + roomId)
 			.use((socket, next) => {
-				let token = socket.handshake.query.token || null;
 				let roomId1 = socket.handshake.query.roomId || null;
 				let userId1 = socket.handshake.query.userId || null;
-				logToConsole('PLEASANT', 'User Object in Socket Handshake:')
+				logToConsole('PLEASANT', `User Object in Socket Handshake: userid=${userId1}, roomid=${roomId1}`);
 				console.log(socket.handshake.query);
 				if (userId1) {
 					authUser(userId1, roomId1).then(authRes => {
@@ -50,7 +49,7 @@ router.post('/createRoom', (req, res) => {
 				}
 			});
 		nsp.on('connection', function (socket) {
-			logToConsole('WARNING', `Someone trying to connect... [Socket ID = ${socket.id}]`);
+			logToConsole('WARNING', `Someone trying to connect... [Socket ID = ${socket.id}, Room ID = ${socket._roomId}]`);
 			if (!socket._isAuthenticated) {
 				socket.emit("authenticate", { status: false, msg: socket._authError });
 				logToConsole('DANGER', 'Someone Tried to Connect but Authentication Failed :(');
@@ -74,7 +73,7 @@ router.post('/createRoom', (req, res) => {
 							logToConsole('PLEASANT', 'Someone joining for 1st time');
 						}
 					});
-					rejoinTask.then(r => {
+					rejoinTask.then(() => {
 						if (resp.status) {
 							Room.getGuests(socket._roomId, true).then(resp2 => {
 								joinPersonalRooms(socket._guestId, resp2.data, socket);
