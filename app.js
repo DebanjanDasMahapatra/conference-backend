@@ -15,11 +15,11 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-mongoose.connect(process.env.MONGODB_URI, { useFindAndModify: false, useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true }, () => {
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true }).then(success => {
     logToConsole("SUCCESS", "Database Connected");
-});
-mongoose.connection.on('error', () => {
+}).catch(error => {
     logToConsole("DANGER", "MongoDB connection error. Please make sure that MongoDB is running.");
+    console.log(error);
     process.exit(1);
 });
 

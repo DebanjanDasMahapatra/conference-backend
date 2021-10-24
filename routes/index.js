@@ -58,26 +58,30 @@ router.post('/createRoom', (req, res) => {
 			} else {
 				Room.getGuests(socket._roomId).then(resp => {
 					const previouslyLeftUser = resp.data.find(r => r.guestId == socket._guestId);
-					let rejoinTask = new Promise((resolve,reject)=>{
-						if(previouslyLeftUser) {
+					let rejoinTask = new Promise((resolve, reject) => {
+						if (previouslyLeftUser) {
 							logToConsole('WARNING', `Someone trying to re-join... [Socket ID = ${socket.id}], Guest ID = ${socket._guestId}]`);
 							Room.joinRoom(resp.meetingId, previouslyLeftUser).then(result => {
 								logToConsole('SUCCESS', `Someone Re-joined Successfully... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
-								resolve();							
+								resolve();
 							}).catch(err => {
 								console.log(err);
-								logToConsole("DANGER",`Someone Failed to re-join... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+								logToConsole("DANGER", `Someone Failed to re-join... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
 								reject();
 							});
 						} else {
 							resolve();
-							logToConsole('PLEASANT', 'No rejoin path is here');
+							logToConsole('PLEASANT', 'Someone joining for 1st time');
 						}
-					});					
+					});
 					rejoinTask.then(r => {
 						if (resp.status) {
-							joinPersonalRooms(socket._guestId, resp.data, socket);
-							socket.emit("authenticate", { status: true, msg: "Successfuly authenticated, Sending user list", guests: resp.data });
+							Room.getGuests(socket._roomId, true).then(resp2 => {
+								joinPersonalRooms(socket._guestId, resp2.data, socket);
+								socket.emit("authenticate", { status: true, msg: "Successfuly authenticated, Sending user list", guests: resp2.data });
+							}).catch(err => {
+								socket.emit("authenticate", { status: true, msg: "Successfuly authenticated, Sending user list" + err, guests: [] });
+							})
 						} else {
 							socket.emit("authenticate", { status: true, msg: "Successfuly authenticated, Sending user list" + resp.msg, guests: [] });
 						}
@@ -102,7 +106,7 @@ router.post('/createRoom', (req, res) => {
 				}
 				socket.on('join-personal-room', (response) => {
 					let { ownId, userId } = response;
-					let personalRoomId = getPersonalRoomId(ownId, userId);					
+					let personalRoomId = getPersonalRoomId(ownId, userId);
 					logToConsole('INFO', `NEW PERSONAL ROOM = ${personalRoomId}`);
 					socket.join(personalRoomId);
 				});
@@ -123,14 +127,18 @@ router.post('/createRoom', (req, res) => {
 					logToConsole('WARNING', `Someone trying to disconnect... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
 					Room.leaveRoom(socket._roomId, socket._guestId).then(result => {
 						logToConsole('SUCCESS', `Someone Disconnected Successfully... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+						nsp.emit('user-left', {
+							'userId': socket._guestId
+						});
 					}).catch(err => {
 						console.log(err);
-						logToConsole("DANGER",`Someone Failed to disconnect... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+						logToConsole("DANGER", `Someone Failed to disconnect... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
 					});
 				})
 				nsp.emit('new-user-added', {
 					'userId': socket._guestId,
 					'name': socket._name,
+					'isHost': socket._isHost,
 				});
 				logToConsole('SUCCESS', 'Someone Connected Successfully');
 			}
@@ -149,7 +157,7 @@ router.post('/createRoom', (req, res) => {
 	})
 });
 
-router.post('/joinRoom', (req, res, next) => {
+router.post('/joinRoom', (req, res) => {
 	var meetingId = req.body.meetingId;
 	var guestName = req.body.username;
 	var roomKey = req.body.roomKey || null;
@@ -183,16 +191,25 @@ router.post('/joinRoom', (req, res, next) => {
 					return handle200Error(res, "Invalid Room Key");
 				}
 			} else {
-				const nsp = io.of('/' + roomId);
-				var nspSockets = Object.keys(nsp.connected);
-				// console.warn("NSG 0",nsp.connected[Object.keys(nsp.connected)[0]]);//.sockets.sockets);
-				// console.warn("KEYS 0",Object.keys(nsp.connected[Object.keys(nsp.connected)[0]]));//.sockets.sockets));
-				var hostSocket = nspSockets.find(x => {
-					return nsp.connected[x]._isHost == true;
-				})
-				console.log("HOST SOCKET", hostSocket);
-				hostSocket = nsp.connected[hostSocket];
-				hostSocket.emit('guest-request', guestObj);
+				try {
+					const nsp = io.of('/' + roomId);
+					logToConsole('INFO', 'NSP Sockets start >>>>');
+					var nspSockets = [...nsp.sockets.keys()];
+					console.log(nspSockets);
+					// console.warn("NSG 0",nsp.connected[Object.keys(nsp.connected)[0]]);//.sockets.sockets);
+					// console.warn("KEYS 0",Object.keys(nsp.connected[Object.keys(nsp.connected)[0]]));//.sockets.sockets));
+					var hostSocket = nspSockets.find(x => {
+						return nsp.sockets.get(x)._isHost == true;
+					});
+					console.log(hostSocket);
+					hostSocket = nsp.sockets.get(hostSocket);
+					hostSocket.emit('guest-request', guestObj);
+					logToConsole('INFO', 'NSP Sockets end >>>>');
+				} catch (err) {
+					logToConsole("DANGER", `Failed to send Notification to Host`);
+					console.log(err);
+					return handleError(res);
+				}
 				return res.status(200).json({
 					'status': 0,
 					'data': {
@@ -210,7 +227,7 @@ router.post('/joinRoom', (req, res, next) => {
 	});
 });
 
-router.get('/checkReqStatus', (req, res, next) => {
+router.get('/checkReqStatus', (req, res) => {
 	var guestId = req.query.guestId || null;
 	var meetingId = req.query.meetingId || null;
 	if (guestId && meetingId) {
@@ -223,7 +240,7 @@ router.get('/checkReqStatus', (req, res, next) => {
 			if (guest) {
 				return res.status(200).json({
 					'status': 1,
-					'data': { 'guestId': guest.guestId, 'guestName': guest.guestName },
+					'guestObj': { 'guestId': guest.guestId, 'guestName': guest.guestName },
 					'roomId': room.roomId
 				})
 			} else {
@@ -270,7 +287,7 @@ const joinPersonalRooms = (ownId, guests, socket) => {
 		let userId = guest.guestId;
 		if (userId != ownId) {
 			let roomId = getPersonalRoomId(ownId, userId);
-			console.log('\x1b[34m%s\x1b[0m', `${ownId} and ${userId} joining to ${roomId}`);
+			logToConsole('INFO', `${ownId} and ${userId} joining to ${roomId}`);
 			socket.join(roomId);
 		}
 	});
