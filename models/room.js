@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const { getNewId } = require('../utils/utils');
 const Schema = mongoose.Schema;
 const roomSchema = new Schema({
     meetingId: {

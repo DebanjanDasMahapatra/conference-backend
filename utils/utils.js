@@ -1,7 +1,15 @@
 const uniqid = require('uniqid');
 
-const getNewId = (userName = "") => {
-    return uniqid.process(userName);
+const getNewMeetingId = () => {
+    return uniqid();
+}
+
+const getNewRoomId = (userName) => {
+    return uniqid(userName);
+}
+
+const getNewUserId = () => {
+    return uniqid.process();
 }
 
 const getNewKey = () => {
@@ -63,7 +71,9 @@ const logToConsole = (type, message) => {
 }
 
 module.exports = {
-    getNewId,
+    getNewMeetingId,
+    getNewRoomId,
+    getNewUserId,
     getNewKey,
     handleError,
     handle200Error,

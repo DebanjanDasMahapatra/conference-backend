@@ -1,23 +1,25 @@
 const router = require('express').Router();
 const User = require('../models/user');
 const Room = require('../models/room');
-const { getNewId, getNewKey, handle200Error, handleError, getPersonalRoomId, logToConsole } = require('../utils/utils')
+const { getNewMeetingId, getNewRoomId, getNewUserId, getNewKey, handle200Error, handleError, getPersonalRoomId, logToConsole } = require('../utils/utils')
 
 router.post('/createRoom', (req, res) => {
-	var username = req.body.username;
-	var roomId = getNewId(req.body.username);
-	var host = {
-		'hostName': username,
-		'hostId': getNewId()
+	let username = req.body.username || null;
+	if (!username) {
+		return handle200Error(res, "Username is required");
 	}
-	var room = new Room({
-		'meetingId': getNewId(),
+	const roomId = getNewRoomId(req.body.username);
+	const host = {
+		'hostName': username,
+		'hostId': getNewUserId()
+	}
+	new Room({
+		'meetingId': getNewMeetingId(),
 		'roomId': roomId,
 		'host': host,
 		'guests': [{ 'guestId': host.hostId, 'guestName': host.hostName, 'isHost': true }],
 		'roomKey': getNewKey(),
-	});
-	room.save().then(newRoom => {
+	}).save().then(newRoom => {
 		const nsp = io
 			.of('/' + roomId)
 			.use((socket, next) => {
@@ -32,7 +34,7 @@ router.post('/createRoom', (req, res) => {
 						socket._guestId = userId1,
 							socket._isHost = authRes.isHost,
 							socket._name = authRes.guestName,
-							socket._roomId = roomId1
+							socket._roomId = roomId1;
 						console.log("Use If Then me ", socket._isAuthenticated, socket._isHost, socket._authError);
 						return next();
 					}).catch(x => {
@@ -48,8 +50,8 @@ router.post('/createRoom', (req, res) => {
 					return next();
 				}
 			});
-		nsp.on('connection', function (socket) {
-			logToConsole('WARNING', `Someone trying to connect... [Socket ID = ${socket.id}, Room ID = ${socket._roomId}]`);
+		nsp.on('connection', socket => {
+			logToConsole('WARNING', `Someone trying to connect... [User ID = ${socket._guestId}, Room ID = ${socket._roomId}]`);
 			if (!socket._isAuthenticated) {
 				socket.emit("authenticate", { status: false, msg: socket._authError });
 				logToConsole('DANGER', 'Someone Tried to Connect but Authentication Failed :(');
@@ -59,13 +61,13 @@ router.post('/createRoom', (req, res) => {
 					const previouslyLeftUser = resp.data.find(r => r.guestId == socket._guestId);
 					let rejoinTask = new Promise((resolve, reject) => {
 						if (previouslyLeftUser) {
-							logToConsole('WARNING', `Someone trying to re-join... [Socket ID = ${socket.id}], Guest ID = ${socket._guestId}]`);
+							logToConsole('WARNING', `Someone trying to re-join... [User ID = ${socket._guestId}], Guest ID = ${socket._guestId}]`);
 							Room.joinRoom(resp.meetingId, previouslyLeftUser).then(result => {
-								logToConsole('SUCCESS', `Someone Re-joined Successfully... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+								logToConsole('SUCCESS', `Someone Re-joined Successfully... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 								resolve();
 							}).catch(err => {
 								console.log(err);
-								logToConsole("DANGER", `Someone Failed to re-join... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+								logToConsole("DANGER", `Someone Failed to re-join... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 								reject();
 							});
 						} else {
@@ -123,23 +125,23 @@ router.post('/createRoom', (req, res) => {
 					nsp.emit('group-message-reply', msgObj);
 				})
 				socket.on('disconnect', () => {
-					logToConsole('WARNING', `Someone trying to disconnect... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+					logToConsole('WARNING', `Someone trying to disconnect... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 					Room.leaveRoom(socket._roomId, socket._guestId).then(result => {
-						logToConsole('SUCCESS', `Someone Disconnected Successfully... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+						logToConsole('SUCCESS', `Someone Disconnected Successfully... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 						nsp.emit('user-left', {
 							'userId': socket._guestId
 						});
 					}).catch(err => {
 						console.log(err);
-						logToConsole("DANGER", `Someone Failed to disconnect... [Socket ID = ${socket.id}, Guest ID = ${socket._guestId}]`);
+						logToConsole("DANGER", `Someone Failed to disconnect... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 					});
-				})
+				});
 				nsp.emit('new-user-added', {
 					'userId': socket._guestId,
 					'name': socket._name,
 					'isHost': socket._isHost,
 				});
-				logToConsole('SUCCESS', 'Someone Connected Successfully');
+				logToConsole('SUCCESS', `Someone Connected Successfully... [User ID = ${socket._guestId}, Guest ID = ${socket._guestId}]`);
 			}
 		});
 		res.status(200).json({
@@ -164,7 +166,7 @@ router.post('/joinRoom', (req, res) => {
 		if (result.status) {
 			var roomId = result.data.roomId;
 			var guestObj = {
-				'guestId': getNewId(),
+				'guestId': getNewUserId(),
 				'guestName': guestName
 			}
 			if (roomKey) {
