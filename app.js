@@ -4,7 +4,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const { logToConsole } = require('./utils/utils');
+const { logToConsole, handle401Error } = require('./utils/utils');
 require('dotenv').config();
 
 const app = express();
@@ -23,7 +23,13 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
     process.exit(1);
 });
 
-app.use('/', require('./routes/index'));
-app.use('/admin', require('./routes/admin'));
+app.use('/meetings', require('./routes/index'));
+app.use('/users', require('./routes/users'));
+app.use('/admin', (req, res, next) => {
+    if(req.headers['x-api-key'] != process.env.API_KEY) {
+        return handle401Error(res);
+    }
+    return next();
+}, require('./routes/admin'));
 
 module.exports = app;

@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const Room = require('../models/room');
+const User = require('../models/user');
 
-router.get('/clearAll', (req, res) => {
+router.delete('/meetings', (req, res) => {
   Room.deleteMany({}, (err, data) => {
     return res.status(200).json({
       status: err ? "Failed" : "Success",
@@ -10,7 +11,7 @@ router.get('/clearAll', (req, res) => {
   });
 });
 
-router.get('/getAll', (req, res) => {
+router.get('/meetings', (req, res) => {
   Room.find({}, (err, data) => {
     return res.status(200).json({
       status: err ? "Failed" : "Success",
@@ -19,8 +20,17 @@ router.get('/getAll', (req, res) => {
   });
 });
 
-router.get('/getGuests/:id', (req, res) => {
-  Room.findOne({ 'roomId': req.params.id || "" }, (err, data) => {
+router.delete('/users', (req, res) => {
+  User.deleteMany({}, (err, data) => {
+    return res.status(200).json({
+      status: err ? "Failed" : "Success",
+      ack: err || data
+    })
+  });
+});
+
+router.get('/users', (req, res) => {
+  User.find({}, (err, data) => {
     return res.status(200).json({
       status: err ? "Failed" : "Success",
       info: err || data

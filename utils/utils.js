@@ -1,11 +1,13 @@
 const uniqid = require('uniqid');
+const JWT = require('jsonwebtoken');
 
 const getNewMeetingId = () => {
     return uniqid();
 }
 
 const getNewRoomId = (userName) => {
-    return uniqid(userName);
+    const rid = Buffer.from(userName).toString('base64');
+    return uniqid(rid.substring(0, rid.length - 2));
 }
 
 const getNewUserId = () => {
@@ -24,6 +26,20 @@ const handleError = (res) => {
 
 const handle200Error = (res, msg = "Internal Server Error") => {
     return res.status(200).json({
+        'status': 0,
+        'msg': msg
+    });
+}
+
+const handle400Error = (res, msg = "Required data missing") => {
+    return res.status(400).json({
+        'status': 0,
+        'msg': msg
+    });
+}
+
+const handle401Error = (res, msg = "Unauthorized") => {
+    return res.status(401).json({
         'status': 0,
         'msg': msg
     });
@@ -70,6 +86,49 @@ const logToConsole = (type, message) => {
     }
 }
 
+/**
+ * 
+ * @param {string} userInfo 
+ * @param {Function} callback 
+ */
+const generateToken = (userInfo, callback) => {
+    JWT.sign(userInfo, process.env.API_KEY, { algorithm: 'HS512', expiresIn: 60 * 30 }, (err, token) => {
+        if(err) {
+            logToConsole('DANGER', 'Signing Error');
+            console.log(err);
+            return callback({ status: false, err });
+        }
+        return callback({ status: true, token })
+    });
+}
+
+const verifyToken = (req, res, next) => {
+    JWT.verify(req.headers.authorization?.split(' ')[1], process.env.API_KEY, (err, data) => {
+        if(err) {
+            logToConsole('DANGER', 'Verification Error');
+            console.log(err);
+            return res.status(401).json({ status: 0, msg: "Unauthorized: " + err.message, err });
+        }
+        req.user = data;
+        return next();
+    });
+}
+
+const checkToken = (req, res, next) => {
+    if(!req.headers.authorization) {
+        return next();
+    }
+    JWT.verify(req.headers.authorization?.split(' ')[1], process.env.API_KEY, (err, data) => {
+        if(err) {
+            logToConsole('DANGER', 'Verification Error');
+            console.log(err);
+            return res.status(401).json({ status: 0, msg: "Unauthorized: " + err.message, err });
+        }
+        req.user = data;
+        return next();
+    });
+}
+
 module.exports = {
     getNewMeetingId,
     getNewRoomId,
@@ -77,6 +136,11 @@ module.exports = {
     getNewKey,
     handleError,
     handle200Error,
+    handle400Error,
+    handle401Error,
     getPersonalRoomId,
-    logToConsole
+    logToConsole,
+    generateToken,
+    verifyToken,
+    checkToken
 }

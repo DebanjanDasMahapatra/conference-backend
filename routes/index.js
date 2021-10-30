@@ -1,16 +1,13 @@
 const router = require('express').Router();
+const sha1 = require('sha1');
 const User = require('../models/user');
 const Room = require('../models/room');
-const { getNewMeetingId, getNewRoomId, getNewUserId, getNewKey, handle200Error, handleError, getPersonalRoomId, logToConsole } = require('../utils/utils')
+const { getNewMeetingId, getNewRoomId, getNewUserId, getNewKey, handle200Error, handleError, getPersonalRoomId, logToConsole, verifyToken, checkToken, handle400Error } = require('../utils/utils')
 
-router.post('/createRoom', (req, res) => {
-	let username = req.body.username || null;
-	if (!username) {
-		return handle200Error(res, "Username is required");
-	}
-	const roomId = getNewRoomId(req.body.username);
+router.post('/createRoom', verifyToken, (req, res) => {
+	const roomId = getNewRoomId(req.user.email);
 	const host = {
-		'hostName': username,
+		'hostName': req.user.name,
 		'hostId': getNewUserId()
 	}
 	new Room({
@@ -158,9 +155,15 @@ router.post('/createRoom', (req, res) => {
 	})
 });
 
-router.post('/joinRoom', (req, res) => {
+router.post('/joinRoom', checkToken, (req, res) => {
+	if(!req.body.meetingId) {
+		return handle400Error(res, "Meeting ID missing");
+	}
+	if(!req.body.username && !req.user) {
+		return handle400Error(res, "Username / Email is missing");
+	}
 	var meetingId = req.body.meetingId;
-	var guestName = req.body.username;
+	var guestName = req.user ? req.user.name : req.body.username;
 	var roomKey = req.body.roomKey || null;
 	Room.getRoomId(meetingId).then((result) => {
 		if (result.status) {
@@ -229,8 +232,11 @@ router.post('/joinRoom', (req, res) => {
 });
 
 router.get('/checkReqStatus', (req, res) => {
+	if(!req.query.meetingId) {
+		return handle400Error(res, "Meeting ID missing");
+	}
 	var guestId = req.query.guestId || null;
-	var meetingId = req.query.meetingId || null;
+	var meetingId = req.query.meetingId;
 	if (guestId && meetingId) {
 		Room.findOne({ 'meetingId': meetingId }, (err, room) => {
 			if (err) return handleError(res);
@@ -256,7 +262,10 @@ router.get('/checkReqStatus', (req, res) => {
 })
 
 router.get('/getUserInfo', (req, res) => {
-	var meetingId = req.query.meetingId || null;
+	if(!req.query.meetingId) {
+		return handle400Error(res, "Meeting ID missing");
+	}
+	var meetingId = req.query.meetingId
 	var userId = req.query.userId || null;
 	if (meetingId) {
 		Room.findOne({ 'meetingId': meetingId }, (err, room) => {
